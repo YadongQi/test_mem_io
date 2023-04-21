@@ -1,0 +1,48 @@
+name: TEST MEM IO CI
+
+on: [push, pull_request]
+
+jobs:
+  build_ubuntu:
+    runs-on: ubuntu-20.04
+    env:
+      LOCAL_INSTALL_DIR: ${{ github.workspace }}/.local
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - name: setup
+        run: |
+          sudo apt-get --quiet update --yes
+          sudo apt-get --quiet install --yes make
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          gcc --version
+      - name: build
+        run: |
+          make
+      - name: artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: test_mem_io.${{ github.run_id }}.${{ github.sha }}
+          path: |
+            build
+
+  build_ndk:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      #- uses: nttld/setup-ndk@v1
+      #  with:
+      #    ndk-version: r25b
+      - run: |
+          echo "NDK_HOME: $ANDROID_NDK_HOME"
+          $ANDROID_NDK_HOME/ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=./copy/Android.mk APP_ABI=x86_64
+          ls -al
+      - name: artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: test_mem_io_android.${{ github.run_id }}.${{ github.sha }}
+          path: |
+            obj
+            libs

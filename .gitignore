@@ -1,0 +1,14 @@
+# C/C++ build outputs
+.build/
+build/
+bins
+gens
+libs
+objs
+*.bin
+*.o
+
+
+# Visual Studio Code artifacts
+.vscode/*
+.history/
