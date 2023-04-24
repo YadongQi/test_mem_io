@@ -1,7 +1,7 @@
 
 export BUILD_DIR ?= $(CURDIR)/build
 
-all: copy-file gen-file check-file
+all: copy-file gen-file check-file copy-check
 
 copy-file:
 	make -C copy
@@ -11,3 +11,6 @@ gen-file:
 
 check-file:
 	make -C checkfile
+
+copy-check:
+	make -C copy_check
