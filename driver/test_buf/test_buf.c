@@ -43,7 +43,7 @@ static void tbuf_start(void *arg) {
 		return;
 	}
 	pfn = vmalloc_to_pfn(buf);
-	pr_info("va=0x%p, pfn=0x%lx, pfn2ka=0x%p, pfn2ka_off=0x%lx\n", buf, pfn, pfn_to_kaddr(pfn), __pa(pfn_to_kaddr(pfn)) + offset_in_page(buf));
+	pr_info("va=0x%lx, pfn=0x%lx, pfn2ka=0x%lx, pfn2ka_off=0x%lx\n", (unsigned long)buf, pfn, (unsigned long)pfn_to_kaddr(pfn), __pa(pfn_to_kaddr(pfn)) + offset_in_page(buf));
 	for (i = 0; i < BUFF_CNT64; i++) {
 		buf[i] = -1ULL;
 	}
@@ -52,7 +52,7 @@ static void tbuf_start(void *arg) {
 		set_memory_ro((uint64_t)buf, BUFF_SIZE >> PAGE_SHIFT);
 #endif
 
-	pr_info("Buffer:[%p(0x%llx), 0x%x], Loop counts:%d, mr=%d\n", buf, virt_to_phys(buf), BUFF_SIZE, loops, mem_ro);
+	pr_info("Buffer:[%lx(0x%llx), 0x%x], Loop counts:%d, mr=%d\n", (unsigned long)buf, virt_to_phys(buf), BUFF_SIZE, loops, mem_ro);
 	for (i = 0; i < loops; i++) {
 		for (j = 0; j < BUFF_CNT64; j++) {
 			if (buf[j] != -1ULL) {
