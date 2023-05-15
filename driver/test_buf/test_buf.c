@@ -37,6 +37,7 @@ static long tbuf_start(void) {
 	uint32_t i = 0, j = 0;
 	int corrupted = 0;
 	unsigned long pfn = 0;
+	phys_addr_t pa =  0;
 	uint64_t *buf = vmalloc(BUFF_SIZE);
 	if (!buf) {
 		pr_err("vmalloc buffer failed!\n");
@@ -51,8 +52,8 @@ static long tbuf_start(void) {
 	if (mem_ro)
 		set_memory_ro((uint64_t)buf, BUFF_SIZE >> PAGE_SHIFT);
 #endif
-
-	pr_info("Buffer:[%lx(0x%llx), 0x%x], Loop counts:%d, mr=%d\n", (unsigned long)buf, virt_to_phys(buf), BUFF_SIZE, loops, mem_ro);
+	pa = virt_to_phys(buf);
+	pr_info("Buffer:[%lx(%pa), 0x%x], Loop counts:%d, mr=%d\n", (unsigned long)buf, &pa, BUFF_SIZE, loops, mem_ro);
 	for (i = 0; i < loops; i++) {
 		for (j = 0; j < BUFF_CNT64; j++) {
 			if (buf[j] != -1ULL) {
