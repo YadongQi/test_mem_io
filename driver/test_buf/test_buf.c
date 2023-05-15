@@ -11,6 +11,7 @@
 #include <linux/err.h>
 #include <linux/set_memory.h>
 #include <linux/mm.h>
+#include <linux/kallsyms.h>
 #include <asm/io.h>
 
 #include "test_buf.h"
@@ -18,6 +19,9 @@
 MODULE_DESCRIPTION("TBUF module");
 MODULE_AUTHOR("Qi, Yadong");
 MODULE_LICENSE("Dual BSD/GPL");
+
+static int (*k_set_memory_ro)(unsigned long addr, int numpages) = NULL;
+static int (*k_set_memory_rw)(unsigned long addr, int numpages) = NULL;
 
 #define KB *(1024U)
 #define MB *(1024U KB)
@@ -48,9 +52,9 @@ static long tbuf_start(void) {
 	for (i = 0; i < BUFF_CNT64; i++) {
 		buf[i] = -1ULL;
 	}
-#if 0
-	if (mem_ro)
-		set_memory_ro((uint64_t)buf, BUFF_SIZE >> PAGE_SHIFT);
+#if 1
+	if (mem_ro && k_set_memory_ro)
+		k_set_memory_ro((uint64_t)buf, BUFF_SIZE >> PAGE_SHIFT);
 #endif
 	pa = virt_to_phys(buf);
 	pr_info("Buffer:[%lx(%pa), 0x%x], Loop counts:%d, mr=%d\n", (unsigned long)buf, &pa, BUFF_SIZE, loops, mem_ro);
@@ -65,6 +69,10 @@ static long tbuf_start(void) {
 		if (corrupted)
 			break;
 	}
+
+	if (mem_ro && k_set_memory_rw)
+		k_set_memory_rw((uint64_t)buf, BUFF_SIZE >> PAGE_SHIFT);
+
 	if (buf)
 		vfree(buf);
 	return 0;
@@ -72,6 +80,7 @@ static long tbuf_start(void) {
 
 static long tbuf_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 	uint32_t lps = 0, mro = 0;
+	uint64_t smro = 0, smrw = 0;
 	pr_info("tbuf ioctl!\n");
 	switch (cmd) {
 	case TBUF_SETLOOPS:
@@ -87,6 +96,22 @@ static long tbuf_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 			break;
 		}
 		mem_ro = mro;
+		break;
+	case TBUF_SET_KSETMRO:
+		if (copy_from_user(&smro, (uint64_t *)arg, sizeof(smro))) {
+			pr_err("Failed to read smro!\n");
+			break;
+		}
+		pr_info("address of set_memory_ro:0x%llx\n", smro);
+		k_set_memory_ro = (int (*)(unsigned long, int))smro;
+		break;
+	case TBUF_SET_KSETMRW:
+		if (copy_from_user(&smrw, (uint64_t *)arg, sizeof(smrw))) {
+			pr_err("Failed to read smro!\n");
+			break;
+		}
+		pr_info("address of set_memory_rw:0x%llx\n", smrw);
+		k_set_memory_rw = (int (*)(unsigned long, int))smrw;
 		break;
 	case TBUF_START:
 		tbuf_start();
