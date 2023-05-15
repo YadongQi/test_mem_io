@@ -22,6 +22,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
     ioctl(fd, TBUF_SETLOOPS, &loop);
+    ioctl(fd, TBUF_SETMEMRO, &loop);
     ioctl(fd, TBUF_START, NULL);
 
     close(fd);

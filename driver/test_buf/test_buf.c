@@ -9,6 +9,8 @@
 #include <linux/uaccess.h>
 #include <linux/ioctl.h>
 #include <linux/err.h>
+#include <linux/set_memory.h>
+#include <linux/mm.h>
 #include <asm/io.h>
 
 #include "test_buf.h"
@@ -29,20 +31,28 @@ static int tbuf_open(struct inode* inode, struct file * file) {
 }
 
 static uint32_t loops = 1;
+static uint32_t mem_ro = 0;
 
 static long tbuf_start(void) {
 	uint32_t i = 0, j = 0;
 	int corrupted = 0;
+	unsigned long pfn = 0;
 	uint64_t *buf = vmalloc(BUFF_SIZE);
 	if (!buf) {
 		pr_err("vmalloc buffer failed!\n");
 		return -1;
 	}
+	pfn = vmalloc_to_pfn(buf);
+	pr_info("va=0x%p, pfn=0x%lx, pfn2ka=0x%p, pfn2ka_off=0x%lx\n", buf, pfn, pfn_to_kaddr(pfn), __pa(pfn_to_kaddr(pfn)) + offset_in_page(buf));
 	for (i = 0; i < BUFF_CNT64; i++) {
 		buf[i] = -1ULL;
 	}
+#if 0
+	if (mem_ro)
+		set_memory_ro((uint64_t)buf, BUFF_SIZE >> PAGE_SHIFT);
+#endif
 
-	pr_info("Buffer:[%p, 0x%x], Loop counts:%d\n", buf, BUFF_SIZE, loops);
+	pr_info("Buffer:[%p(0x%llx), 0x%x], Loop counts:%d, mr=%d\n", buf, virt_to_phys(buf), BUFF_SIZE, loops, mem_ro);
 	for (i = 0; i < loops; i++) {
 		for (j = 0; j < BUFF_CNT64; j++) {
 			if (buf[j] != -1ULL) {
@@ -60,7 +70,7 @@ static long tbuf_start(void) {
 }
 
 static long tbuf_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
-	uint32_t lps = 0;
+	uint32_t lps = 0, mro = 0;
 	pr_info("tbuf ioctl!\n");
 	switch (cmd) {
 	case TBUF_SETLOOPS:
@@ -69,6 +79,13 @@ static long tbuf_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 			break;
 		}
 		loops = (lps == 0) ? 100 : lps;
+		break;
+	case TBUF_SETMEMRO:
+		if (copy_from_user(&mro, (uint32_t *)arg, sizeof(mro))) {
+			pr_err("Failed to read mro!\n");
+			break;
+		}
+		mem_ro = mro;
 		break;
 	case TBUF_START:
 		tbuf_start();
