@@ -33,14 +33,14 @@ static int tbuf_open(struct inode* inode, struct file * file) {
 static uint32_t loops = 1;
 static uint32_t mem_ro = 0;
 
-static void tbuf_start(void *arg) {
+static long tbuf_start(void) {
 	uint32_t i = 0, j = 0;
 	int corrupted = 0;
 	unsigned long pfn = 0;
 	uint64_t *buf = vmalloc(BUFF_SIZE);
 	if (!buf) {
 		pr_err("vmalloc buffer failed!\n");
-		return;
+		return -1;
 	}
 	pfn = vmalloc_to_pfn(buf);
 	pr_info("va=0x%lx, pfn=0x%lx, pfn2ka=0x%lx, pfn2ka_off=0x%lx\n", (unsigned long)buf, pfn, (unsigned long)pfn_to_kaddr(pfn), __pa(pfn_to_kaddr(pfn)) + offset_in_page(buf));
@@ -66,7 +66,7 @@ static void tbuf_start(void *arg) {
 	}
 	if (buf)
 		vfree(buf);
-	return;
+	return 0;
 }
 
 static long tbuf_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
@@ -88,7 +88,7 @@ static long tbuf_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 		mem_ro = mro;
 		break;
 	case TBUF_START:
-		smp_call_function_single(0, tbuf_start, NULL, 1);
+		tbuf_start();
 		break;
 	default:
 		pr_err("Unknown IOCTL cmd!\n");
