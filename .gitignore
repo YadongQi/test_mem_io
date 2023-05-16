@@ -7,6 +7,12 @@ libs
 objs
 *.bin
 *.o
+*.cmd
+*.mod
+*.ko
+*.symvers
+*.order
+*.mod.c
 
 
 # Visual Studio Code artifacts
