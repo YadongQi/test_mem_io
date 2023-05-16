@@ -61,7 +61,8 @@ static long tbuf_start(void) {
 	for (i = 0; i < loops; i++) {
 		for (j = 0; j < BUFF_CNT64; j++) {
 			if (buf[j] != -1ULL) {
-				pr_err("Loop[%u],Buf[%p]=0x%llx\n", i, &buf[j], buf[j]);
+				pa = virt_to_phys(&buf[j]);
+				pr_err("Loop[%u],Buf[%lx(%pa)]=0x%llx\n", i, (unsigned long)&buf[j], &pa, buf[j]);
 				corrupted = 1;
 				break;
 			}
