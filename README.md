@@ -9,10 +9,11 @@ $ sudo swapoff -a
 $ ./build/buf_scan 100
 ```
 
-### Kernel
+### Kernel buffer test
 ```
 $ sudo swapoff -a
-$ sudo insmod ./driver/test
+$ make
+$ sudo insmod ./driver/test/test_buf.ko
 $ sudo chmod a+rw /dev/tbuf
-$ ./build/test-buf 100
+$ ./build/test-buf 100 0 0
 ```
