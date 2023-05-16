@@ -26,7 +26,7 @@ static int (*k_set_memory_rw)(unsigned long addr, int numpages) = NULL;
 #define KB *(1024U)
 #define MB *(1024U KB)
 
-#define BUFF_SIZE (2048 MB)
+#define BUFF_SIZE (2648 MB)
 #define BUFF_CNT64 (BUFF_SIZE/8)
 
 static int tbuf_open(struct inode* inode, struct file * file) {
