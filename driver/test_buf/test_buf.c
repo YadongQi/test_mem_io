@@ -37,11 +37,17 @@ static int tbuf_open(struct inode* inode, struct file * file) {
 static uint32_t loops = 1;
 static uint32_t mem_ro = 0;
 
+static unsigned long vmalloc_va_to_pa(void *va) {
+	unsigned long pfn = 0;
+	pfn = vmalloc_to_pfn(va);
+	return __pa(pfn_to_kaddr(pfn)) + offset_in_page(va);
+}
+
 static long tbuf_start(void) {
 	uint32_t i = 0, j = 0;
 	int corrupted = 0;
 	unsigned long pfn = 0;
-	phys_addr_t pa =  0;
+	unsigned long pa =  0;
 	uint64_t *buf = vmalloc(BUFF_SIZE);
 	if (!buf) {
 		pr_err("vmalloc buffer failed!\n");
@@ -56,13 +62,13 @@ static long tbuf_start(void) {
 	if (mem_ro && k_set_memory_ro)
 		k_set_memory_ro((uint64_t)buf, BUFF_SIZE >> PAGE_SHIFT);
 #endif
-	pa = virt_to_phys(buf);
-	pr_info("Buffer:[%lx(%pa), 0x%x], Loop counts:%d, mr=%d\n", (unsigned long)buf, &pa, BUFF_SIZE, loops, mem_ro);
+	pa = vmalloc_va_to_pa(buf);
+	pr_info("Buffer:[%lx(0x%lx, 0x%x], Loop counts:%d, mr=%d\n", (unsigned long)buf, pa, BUFF_SIZE, loops, mem_ro);
 	for (i = 0; i < loops; i++) {
 		for (j = 0; j < BUFF_CNT64; j++) {
 			if (buf[j] != -1ULL) {
-				pa = virt_to_phys(&buf[j]);
-				pr_err("Loop[%u],Buf[%lx(%pa)]=0x%llx\n", i, (unsigned long)&buf[j], &pa, buf[j]);
+				pa = vmalloc_va_to_pa(&buf[j]);
+				pr_err("Loop[%u],Buf[%lx(0x%lx)]=0x%llx\n", i, (unsigned long)&buf[j], pa, buf[j]);
 				corrupted = 1;
 				break;
 			}
