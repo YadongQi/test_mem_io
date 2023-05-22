@@ -11,6 +11,8 @@
 #include <linux/err.h>
 #include <linux/set_memory.h>
 #include <linux/mm.h>
+#include <linux/kthread.h>
+#include <linux/delay.h>
 #include <linux/kallsyms.h>
 #include <asm/io.h>
 
@@ -34,7 +36,6 @@ static int tbuf_open(struct inode* inode, struct file * file) {
 	return 0;
 }
 
-static uint32_t loops = 1;
 static uint32_t mem_ro = 0;
 
 static unsigned long vmalloc_va_to_pa(void *va) {
@@ -43,60 +44,109 @@ static unsigned long vmalloc_va_to_pa(void *va) {
 	return __pa(pfn_to_kaddr(pfn)) + offset_in_page(va);
 }
 
-static long tbuf_start(void) {
-	uint32_t i = 0, j = 0;
-	int corrupted = 0;
+static uint64_t *g_buf = NULL;
+
+static int alloc_buf(void) {
 	unsigned long pfn = 0;
-	unsigned long pa =  0;
-	uint64_t *buf = vmalloc(BUFF_SIZE);
-	if (!buf) {
+	int i = 0;
+	if (g_buf)
+		return 0;
+	g_buf = vmalloc(BUFF_SIZE);
+	if (!g_buf) {
 		pr_err("vmalloc buffer failed!\n");
 		return -1;
 	}
-	pfn = vmalloc_to_pfn(buf);
-	pr_info("va=0x%lx, pfn=0x%lx, pfn2ka=0x%lx, pfn2ka_off=0x%lx\n", (unsigned long)buf, pfn, (unsigned long)pfn_to_kaddr(pfn), __pa(pfn_to_kaddr(pfn)) + offset_in_page(buf));
+	pfn = vmalloc_to_pfn(g_buf);
+	pr_info("va=0x%lx, pfn=0x%lx, pfn2ka=0x%lx, pfn2ka_off=0x%lx\n",
+			(unsigned long)g_buf,
+			pfn,
+			(unsigned long)pfn_to_kaddr(pfn),
+			__pa(pfn_to_kaddr(pfn)) + offset_in_page(g_buf));
+
 	for (i = 0; i < BUFF_CNT64; i++) {
-		buf[i] = -1ULL;
+		g_buf[i] = -1ULL;
 	}
-#if 1
+
 	if (mem_ro && k_set_memory_ro)
-		k_set_memory_ro((uint64_t)buf, BUFF_SIZE >> PAGE_SHIFT);
-#endif
-	pa = vmalloc_va_to_pa(buf);
-	pr_info("Buffer:[%lx(0x%lx, 0x%x], Loop counts:%d, mr=%d\n", (unsigned long)buf, pa, BUFF_SIZE, loops, mem_ro);
-	for (i = 0; i < loops; i++) {
+		k_set_memory_ro((uint64_t)g_buf, BUFF_SIZE >> PAGE_SHIFT);
+
+	return 0;
+}
+
+static int free_buf(void) {
+	if (mem_ro && k_set_memory_rw && g_buf)
+		k_set_memory_rw((uint64_t)g_buf, BUFF_SIZE >> PAGE_SHIFT);
+	if(g_buf) {
+		vfree(g_buf);
+		g_buf = NULL;
+	}
+	return 0;
+}
+
+static struct task_struct *buf_scan_thread = NULL;
+
+static int tbuf_scan(void *data) {
+	uint32_t i = 0, j = 0;
+	int corrupted = 0;
+	unsigned long pa =  0;
+
+	pa = vmalloc_va_to_pa(g_buf);
+	pr_info("Buffer:[%lx(0x%lx, 0x%x)], mr=%d\n", (unsigned long)g_buf, pa, BUFF_SIZE, mem_ro);
+	while(!kthread_should_stop()) {
 		for (j = 0; j < BUFF_CNT64; j++) {
-			if (buf[j] != -1ULL) {
-				pa = vmalloc_va_to_pa(&buf[j]);
-				pr_err("Loop[%u],Buf[%lx(0x%lx)]=0x%llx\n", i, (unsigned long)&buf[j], pa, buf[j]);
+			if (g_buf[j] != -1ULL) {
+				pa = vmalloc_va_to_pa(&g_buf[j]);
+				pr_err("Loop[%u],Buf[%lx(0x%lx)]=0x%llx\n", i, (unsigned long)&g_buf[j], pa, g_buf[j]);
 				corrupted = 1;
 				break;
 			}
 		}
-		if (corrupted)
+		if (corrupted) {
+			while(!kthread_should_stop()) {
+				msleep_interruptible(1);
+			}
 			break;
+		}
+		i++;
+		msleep_interruptible(1);;
 	}
 
-	if (mem_ro && k_set_memory_rw)
-		k_set_memory_rw((uint64_t)buf, BUFF_SIZE >> PAGE_SHIFT);
+	free_buf();
 
-	if (buf)
-		vfree(buf);
 	return 0;
 }
 
+static int tbuf_kthread_start(void) {
+	if (buf_scan_thread)
+		return -1;
+
+	if (alloc_buf() != 0)
+		return -1;
+
+	buf_scan_thread = kthread_run(&tbuf_scan, NULL, "tbuf-scan-thread");
+	if (!buf_scan_thread) {
+		pr_err("Failed to run kthread: tbuf_scan()\n");
+		return -ECHILD;
+	}
+
+	return 0;
+}
+
+static int tbuf_kthread_stop(void) {
+	if (!buf_scan_thread)
+		return 0;
+
+	kthread_stop(buf_scan_thread);
+	buf_scan_thread = NULL;
+	return 0;
+}
+
+
 static long tbuf_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
-	uint32_t lps = 0, mro = 0;
+	uint32_t mro = 0;
 	uint64_t smro = 0, smrw = 0;
 	pr_info("tbuf ioctl!\n");
 	switch (cmd) {
-	case TBUF_SETLOOPS:
-		if (copy_from_user(&lps, (uint32_t *)arg, sizeof(loops))) {
-			pr_err("Failed to read loops!\n");
-			break;
-		}
-		loops = (lps == 0) ? 100 : lps;
-		break;
 	case TBUF_SETMEMRO:
 		if (copy_from_user(&mro, (uint32_t *)arg, sizeof(mro))) {
 			pr_err("Failed to read mro!\n");
@@ -121,7 +171,10 @@ static long tbuf_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 		k_set_memory_rw = (int (*)(unsigned long, int))smrw;
 		break;
 	case TBUF_START:
-		tbuf_start();
+		tbuf_kthread_start();
+		break;
+	case TBUF_STOP:
+		tbuf_kthread_stop();
 		break;
 	default:
 		pr_err("Unknown IOCTL cmd!\n");
@@ -191,6 +244,7 @@ static int mod_init(void)
 
 static void mod_exit(void)
 {
+	tbuf_kthread_stop();
 	pr_err("%s: Exit\n", __func__);
 	chr_dev_clean();
 }
